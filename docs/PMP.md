@@ -28,8 +28,38 @@
 | Name | Jira / GitHub username | Role |
 |---|---|---|
 | Nasser Mahamat Adoum  | Nasser Mahamat Adoum / NasserN11 | Project Manager / Developer / Tester |
-| Hussein Thakwan Zuhair AL-SAFFAR | 
-Hussein Al Saffar / Hussein-Al-Saffar | Developer / Tester |
+| Hussein Thakwan Zuhair AL-SAFFAR | Hussein Al Saffar / Hussein-Al-Saffar | Developer / Tester |
 | Adeviye AYATA | Adeviye Ayata / Adeviye Ayata | Developer / Tester |
-| Kerime Zişan GÖK | / zisangok| Developer / Tester |
+| Kerime Zişan GÖK | zişan gök / zisangok| Developer / Tester |
 | | | |
+
+
+---
+
+## PMP-2. Plan
+
+### Work Packages (Epics)
+
+
+| Epic | Owner | Number of tasks | Planned sprint(s) |
+|---|---|---|---|
+| M1 | | | |
+| M2 | | | |
+| M3 | | | |
+| M4 | | | |
+| M5 | | | |
+| M6 | | | |
+| M7 | | | |
+| M8 | | | |
+
+### Sprint Plan
+
+
+| Sprint | Weeks | Sprint goal | Ends with |
+|---|---|---|---|
+| Sprint 1 | 6 | Set up Jira, GitHub and CI; write SRS and SDD drafts, build the walking skeleton; PMP-2 | Walking skeleton (v0.0), Week 6 |
+| Sprint 2 | 7-8 | Build login, specialist links, weekly schedule, and tasks; first end-to-end test in CI; live demo to the instructor; PMP-3 and PMP-4 | Release v0.1 (M1-M4), mid-term |
+| Sprint 3 | 9-10 | Build specialist entries, documents, weekly statistics, and role-based AI summary; end-to-end tests for 3 critical flows; final SRS and SDD documents; PMP-5 and PMP-6 | Release v0.2, Week 10 |
+| Sprint 4 | 11-12 | Fix bugs; final report; end-to-end tet for each of M1-M8; presentation and live demo | Release v1.0, final |
+
+---
