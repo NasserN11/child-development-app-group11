@@ -30,7 +30,7 @@
 | Nasser Mahamat Adoum  | Nasser Mahamat Adoum / NasserN11 | Project Manager / Developer / Tester |
 | Hussein Thakwan Zuhair AL-SAFFAR | Hussein Al Saffar / Hussein-Al-Saffar | Developer / Tester |
 | Adeviye AYATA | Adeviye Ayata / Adeviye Ayata | Developer / Tester |
-| Kerime Zişan GÖK | zişan gök / zisangok| Developer / Tester |
+| Kerime Zişan GÖK | zişan gök / zisangok | Developer / Tester |
 | | | |
 
 
@@ -43,14 +43,14 @@
 
 | Epic | Owner | Number of tasks | Planned sprint(s) |
 |---|---|---|---|
-| M1 | | | |
-| M2 | | | |
-| M3 | | | |
-| M4 | | | |
-| M5 | | | |
-| M6 | | | |
-| M7 | | | |
-| M8 | | | |
+| M1 | Nasser |  8 | Sprint 1-2 |
+| M2 | Adeviye | 4 | Sprint 2 |
+| M3 | Kerime | 4 | Sprint 2 |
+| M4 | Hussein | 4 | Sprint 2 |
+| M5 | Adeviye | 4 | Sprint 3 |
+| M6 | Nasser | 4 | Sprint 3 |
+| M7 | Hussein | 4 | Sprint 3 |
+| M8 | Kerime | 4 | Sprint 3 |
 
 ### Sprint Plan
 
