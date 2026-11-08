@@ -103,18 +103,27 @@ The UI shows the selected child, week and AI-generated label beside the summary\
 
 ## 2. Module Design
 
-> One row per module (M1–M8, same as your SRS and Jira epics). Name the main components (classes, services, pages) that implement each module.
+Each module is built as a vertical slice: a React screen, an Express route, a service that applies the business rules, and a data access function that runs SQL. Component names below are proposed and can be adjusted during implementation. Requirement IDs refer to the SRS.
 
 | Module | Main components | Implements requirements |
 |---|---|---|
-| M1 | | FR-M1-01, … |
-| M2 | | |
-| M3 | | |
-| M4 | | |
-| M5 | | |
-| M6 | | |
-| M7 | | |
-| M8 | | |
+| M1 – Login, Registration and Roles | **Backend:** `authRoutes`, `authService` (registration, login, bcryptjs hashing, JWT creation), `authenticate` middleware (verifies the JWT), `authorizeChildAccess` middleware (parent owns child, specialist is linked, or child is self), `userRepository`, `childRepository`<br>**Frontend:** `LoginPage`, `RegisterPage`, `CreateChildForm`, `AuthContext` (session kept in memory), role-based route guards and navigation | FR-M1-01 to FR-M1-12, NFR-02, NFR-07 |
+| M2 – Linking Specialists | **Backend:** `linkRoutes`, `linkService` (link by email, unlink, duplicate check), `linkRepository` (also read by `authorizeChildAccess` on every request)<br>**Frontend:** `LinkedSpecialistsPage`, `LinkSpecialistForm`, `UnlinkConfirmPanel` | FR-M2-01 to FR-M2-08 |
+| M3 – Weekly Schedule | **Backend:** `eventRoutes`, `eventService` (end time after start time, creator-only edit and delete), `eventRepository`, shared `weekUtils` (Monday to Monday week in Europe/Istanbul)<br>**Frontend:** `WeeklySchedulePage`, `WeekSelector`, `EventForm`, read-only schedule view for the child | FR-M3-01 to FR-M3-09 |
+| M4 – Tasks | **Backend:** `taskRoutes`, `taskService` (pending on creation, development area check, child marks own task done, assigner changes due date), `taskRepository`<br>**Frontend:** `TaskForm`, `AssignedTaskList` (assigner sees status), `ChildTaskList` (mark as done) | FR-M4-01 to FR-M4-11 |
+| M5 – Specialist Entries | **Backend:** `observationRoutes`, `observationService` (sets the `edited` flag, only the author edits), `observationRepository`<br>**Frontend:** `ObservationForm`, `ObservationList` (shows the "Edited" label) | FR-M5-01 to FR-M5-07 |
+| M6 – Documents | **Backend:** `documentRoutes`, `documentService` (checks PDF, PNG or JPEG content and the 10 MB limit, removes the file if saving metadata fails), Multer upload middleware, `documentRepository`, private local upload directory, protected download route<br>**Frontend:** `DocumentsPage`, `UploadForm`, `DocumentList` | FR-M6-01 to FR-M6-07 |
+| M7 – Weekly Statistics | **Backend:** `statsRoutes`, `statsService` (completion rate in total and per development area, "No tasks" when a week or area is empty), `weekUtils`, `taskRepository` queries<br>**Frontend:** `WeeklyStatsPanel` | FR-M7-01 to FR-M7-09 |
+| M8 – Role-Based AI Summary | **Backend:** `aiRoutes`, `aiSummaryService` (selects the authorized records of the week and their source ids), `promptBuilder` (separate parent and specialist prompts), `aiModule` interface with `geminiAdapter` and `mockAdapter`, `contentGuard` (rejects diagnoses, treatments and decisions), 15 second timeout, `aiSummaryRepository` (feedback)<br>**Frontend:** `AiSummaryPanel` ("AI-generated" label and disclaimer), `SourceLinks`, `FeedbackButtons`, retry action | FR-M8-01 to FR-M8-18, NFR-06 |
+
+### Shared components
+
+| Component | Used by | Purpose |
+|---|---|---|
+| `authenticate`, `authorizeChildAccess` | M1 to M8 | One place for identity and child-access checks, so no route can skip them |
+| `weekUtils` | M3, M7, M8 | One definition of a calendar week, so the schedule, statistics and AI input select the same records |
+| Error handler | M1 to M8 | Returns the standard status codes (400, 401, 403, 404, 409, 503) |
+| Seed script | All | Creates synthetic users, children, links and sample records |
 
 ---
 
@@ -141,7 +150,8 @@ erDiagram
 
     USERS {
         int id PK
-        string email UK
+        string email UK "parents and specialists"
+        string username UK "child accounts only"
         string password_hash
         string name
         string role "parent, specialist or child"
@@ -215,19 +225,19 @@ erDiagram
 
 | Entity | Rule |
 |---|---|
-| USERS | `email` is unique. Passwords are stored only as a hash. `role` is one of `parent`, `specialist`, `child`. |
+| USERS | Parents and specialists have a unique `email`; child accounts have a unique `username` instead. Passwords are stored only as a salted hash. `role` is one of `parent`, `specialist`, `child`. |
 | CHILDREN | Each child has exactly one parent and exactly one child login (`user_id` is unique). |
 | SPECIALIST_LINKS | The pair (`child_id`, `specialist_id`) is unique. Unlinking deletes the row, so access ends immediately. |
-| TASKS | `development_area` comes from a fixed list (for example: Language, Motor, Social, Cognitive, Self-care; the team confirms the final list). `status` is `pending` or `done`. Only the child marks a task done. |
+| TASKS | `development_area` is one of Cognitive, Language, Social-Emotional or Motor. Statistics count a task in the week of its `due_date`. `status` is `pending` or `done`. Only the child marks a task done. |
 | OBSERVATIONS | `edited` is set to true when an entry is changed after creation. The child cannot read this table. |
-| DOCUMENTS | Only PDF and image files are accepted. The file is stored on disk; the database keeps the path. The child cannot read this table. |
+| DOCUMENTS | Only PDF, PNG and JPEG files up to 10 MB are accepted. The file is stored on disk under a generated name; the database keeps the path. The child cannot read this table. |
 | AI_SUMMARIES | `source_records` lists the records used, so the screen can link each summary to them. Summaries are labelled "AI-generated" on screen. |
 
 ---
 
 ## 4. API / Interfaces
 
-All endpoints are under `/api`, send and receive JSON (except file upload and download), and need a JWT in the `Authorization: Bearer <token>` header, except login.
+All endpoints are under `/api`, send and receive JSON (except file upload and download), and need a JWT in the `Authorization: Bearer <token>` header, except registration and login. Tokens expire within 60 minutes.
 
 **Access rule for every `/api/children/:childId/...` endpoint.** The backend does not trust the role in the token alone. On each request it checks the current database state:
 
@@ -235,29 +245,33 @@ All endpoints are under `/api`, send and receive JSON (except file upload and do
 - **Linked specialist:** a row exists in `specialist_links` for this child and this specialist.
 - **Child:** `children.user_id` equals the user's id.
 
-If the check fails, the API returns `403 Forbidden` and does nothing. This is how an unlinked specialist is blocked even when their token has not expired (M2).
+If the check fails, the API returns `403 Forbidden` and does nothing. This is how an unlinked specialist is blocked even when their token has not expired.
 
 | Method | Endpoint | Description | Allowed roles | Module |
 |---|---|---|---|---|
-| POST | `/api/auth/login` | Log in with email and password; returns a JWT and the user's role | everyone | M1 |
+| POST | `/api/auth/register` | Register a parent or specialist (unique email and password) | public | M1 |
+| POST | `/api/auth/login` | Log in with email (parent, specialist) or username (child); returns a JWT and the user's role | public | M1 |
 | GET | `/api/me` | Current user and role | all logged-in users | M1 |
+| POST | `/api/children` | Create a child account (name, unique username, password) linked to the calling parent | parent | M1 |
 | GET | `/api/children` | Children the user may access (own children, linked children, or own profile) | all | M1, M2 |
 | GET | `/api/children/:childId/specialists` | List linked specialists | parent | M2 |
-| POST | `/api/children/:childId/specialists` | Link a registered specialist by email and type; `404` if the email is not registered | parent | M2 |
-| DELETE | `/api/children/:childId/specialists/:specialistId` | Unlink a specialist | parent | M2 |
-| GET | `/api/children/:childId/events?weekStart=YYYY-MM-DD` | List events of a week | parent, linked specialist, child | M3 |
-| POST | `/api/children/:childId/events` | Add an event | parent, linked specialist | M3 |
+| POST | `/api/children/:childId/specialists` | Link a registered specialist by email and type; `404` if the email is not a registered specialist, `409` if already linked | parent (owner) | M2 |
+| DELETE | `/api/children/:childId/specialists/:specialistId` | Unlink a specialist | parent (owner) | M2 |
+| GET | `/api/children/:childId/events?weekStart=YYYY-MM-DD` | List events of a week (by start time) | parent, linked specialist, child | M3 |
+| POST | `/api/children/:childId/events` | Add an event; `400` if the end time is not after the start time | parent, linked specialist | M3 |
+| PATCH | `/api/children/:childId/events/:eventId` | Edit an event | event creator | M3 |
+| DELETE | `/api/children/:childId/events/:eventId` | Delete an event | event creator | M3 |
 | GET | `/api/children/:childId/tasks?weekStart=YYYY-MM-DD` | List tasks (optionally by week) with status | parent, linked specialist, child | M4 |
-| POST | `/api/children/:childId/tasks` | Assign a task (title, description, development area, due date) | parent, linked specialist | M4 |
-| PATCH | `/api/children/:childId/tasks/:taskId` | Mark a task as done | child | M4 |
+| POST | `/api/children/:childId/tasks` | Assign a task (title, description, development area, due date); starts as pending | parent, linked specialist | M4 |
+| PATCH | `/api/children/:childId/tasks/:taskId` | Child: mark own task done. Assigner: change the due date of a task they created | child, task assigner | M4 |
 | GET | `/api/children/:childId/observations` | List observations | parent, linked specialist | M5 |
 | POST | `/api/children/:childId/observations` | Add a dated observation | linked specialist | M5 |
-| PATCH | `/api/children/:childId/observations/:obsId` | Edit an observation; sets `edited` to true | the specialist who wrote it | M5 |
+| PATCH | `/api/children/:childId/observations/:obsId` | Edit an observation; sets `edited` to true | the specialist who wrote it (while linked) | M5 |
 | GET | `/api/children/:childId/documents` | List documents (name, type, uploader, date) | parent, linked specialist | M6 |
-| POST | `/api/children/:childId/documents` | Upload a PDF or image (multipart) | parent, linked specialist | M6 |
+| POST | `/api/children/:childId/documents` | Upload a PDF, PNG or JPEG up to 10 MB (multipart) | parent, linked specialist | M6 |
 | GET | `/api/children/:childId/documents/:docId/download` | Download or view a file | parent, linked specialist | M6 |
-| GET | `/api/children/:childId/stats?weekStart=YYYY-MM-DD` | Completion rate for the week, in total and by development area | parent, linked specialist | M7 |
-| POST | `/api/children/:childId/ai-summary` | Generate the week's summary for the caller's role (body: `weekStart`); returns text, "AI-generated" label and source records | parent, linked specialist | M8 |
+| GET | `/api/children/:childId/stats?weekStart=YYYY-MM-DD` | Weekly completion rate, in total and by development area ("No tasks" when empty) | parent, linked specialist | M7 |
+| POST | `/api/children/:childId/ai-summary` | Generate the week's summary for the caller's role (body: `weekStart`); returns text, "AI-generated" label, disclaimer and source records | parent (owner), linked specialist | M8 |
 | PATCH | `/api/children/:childId/ai-summary/:summaryId` | Save feedback (`helpful` or `incorrect`) | parent, linked specialist | M8 |
 
 ### Standard responses
@@ -265,59 +279,23 @@ If the check fails, the API returns `403 Forbidden` and does nothing. This is ho
 | Status | Meaning |
 |---|---|
 | 200 / 201 | Success / created |
-| 400 | Invalid or missing data (for example an empty title or a wrong file type) |
+| 400 | Invalid or missing data (for example an empty title, a development area outside the four values, an unsupported file type) |
 | 401 | Missing, invalid or expired token |
 | 403 | Logged in but not allowed to access this child or do this action |
-| 404 | Record not found (for example an unregistered specialist email) |
+| 404 | Record not found (for example an email that is not a registered specialist) |
+| 409 | Duplicate (email or username already registered, or specialist already linked) |
+| 413 | File larger than 10 MB |
+| 503 | The AI provider failed or did not answer within 15 seconds; the rest of the application keeps working |
 
 ---
 
 ## 5. Critical Flows
 
-### Flow 1: Specialist assigns a task and the child completes it (M4)
+These are the same three critical flows as SRS Section 4.
 
-```mermaid
-sequenceDiagram
-    actor Specialist
-    actor Child
-    participant FE as React Frontend
-    participant API as Express API
-    participant DB as SQLite
+### Flow 1 – Parent Links and Unlinks a Specialist
 
-    Specialist->>FE: Fill in task form and press Save
-    FE->>API: POST /api/children/12/tasks (JWT, task data)
-    API->>API: Verify JWT signature and expiry
-    API->>DB: Is this specialist linked to child 12?
-    DB-->>API: Link found
-    API->>API: Validate title, area and due date
-    API->>DB: INSERT task with status pending
-    DB-->>API: Saved task
-    API-->>FE: 201 Created with task
-    FE-->>Specialist: Task appears in the list
-
-    Child->>FE: Open my tasks
-    FE->>API: GET /api/children/12/tasks (JWT)
-    API->>DB: Is this user the child 12?
-    DB-->>API: Yes
-    API->>DB: SELECT tasks of child 12
-    DB-->>API: Task list
-    API-->>FE: 200 with tasks
-    Child->>FE: Mark task as done
-    FE->>API: PATCH /api/children/12/tasks/45 (status done)
-    API->>DB: UPDATE status done and completed_at
-    DB-->>API: Updated task
-    API-->>FE: 200 OK
-    FE-->>Child: Task shown as done
-
-    Specialist->>FE: View assigned tasks
-    FE->>API: GET /api/children/12/tasks (JWT)
-    API-->>FE: Tasks with updated status
-    FE-->>Specialist: Status shown as done
-
-    Note over API: If the link check fails the API saves nothing and returns 403
-```
-
-### Flow 2: Parent unlinks a specialist, and the specialist loses access (M2)
+Related requirements: FR-M1-01, FR-M1-02, FR-M1-11, FR-M2-01 to FR-M2-07.
 
 ```mermaid
 sequenceDiagram
@@ -327,9 +305,26 @@ sequenceDiagram
     participant API as Express API
     participant DB as SQLite
 
+    Parent->>FE: Enter specialist email and type, confirm
+    FE->>API: POST /api/children/12/specialists (parent JWT)
+    API->>DB: Does this parent own child 12?
+    DB-->>API: Yes
+    API->>DB: Find a registered specialist with this email
+    alt Email is not a registered specialist
+        DB-->>API: Not found
+        API-->>FE: 404 Not Found, no link created
+        FE-->>Parent: Error message
+    else Specialist found
+        DB-->>API: Specialist 7
+        API->>DB: INSERT link of child 12 and specialist 7
+        DB-->>API: Saved link
+        API-->>FE: 201 Created
+        FE-->>Parent: Specialist appears in the linked list
+    end
+
     Parent->>FE: Press Unlink and confirm
     FE->>API: DELETE /api/children/12/specialists/7 (parent JWT)
-    API->>DB: Is this user the parent of child 12?
+    API->>DB: Does this parent own child 12?
     DB-->>API: Yes
     API->>DB: DELETE link of child 12 and specialist 7
     DB-->>API: Deleted
@@ -347,7 +342,67 @@ sequenceDiagram
     FE-->>Specialist: Access denied message
 ```
 
-### Flow 3: Role-based AI summary (M8)
+A parent who does not own the child receives `403` on both the link and unlink requests, and no relationship changes.
+
+### Flow 2 – Specialist Assigns a Task and Child Completes It
+
+Related requirements: FR-M1-12, FR-M2-05, FR-M4-01 to FR-M4-10.
+
+```mermaid
+sequenceDiagram
+    actor Specialist
+    actor Child
+    participant FE as React Frontend
+    participant API as Express API
+    participant DB as SQLite
+
+    Specialist->>FE: Fill in task form and press Save
+    FE->>API: POST /api/children/12/tasks (JWT, task data)
+    API->>API: Verify JWT signature and expiry
+    API->>DB: Is this specialist linked to child 12?
+    alt Not linked
+        DB-->>API: No link found
+        API-->>FE: 403 Forbidden, no task created
+    else Linked
+        DB-->>API: Link found
+        API->>API: Validate title, development area and due date
+        alt Invalid data
+            API-->>FE: 400 Bad Request, no task created
+        else Valid data
+            API->>DB: INSERT task with status pending
+            DB-->>API: Saved task
+            API-->>FE: 201 Created with task
+            FE-->>Specialist: Task appears in the list
+        end
+    end
+
+    Child->>FE: Open my tasks
+    FE->>API: GET /api/children/12/tasks (child JWT)
+    API->>DB: Is this user the child 12?
+    DB-->>API: Yes
+    API->>DB: SELECT tasks of child 12
+    DB-->>API: Task list
+    API-->>FE: 200 with tasks
+    Child->>FE: Mark task as done
+    FE->>API: PATCH /api/children/12/tasks/45 (status done)
+    API->>DB: Is task 45 a task of this child?
+    DB-->>API: Yes
+    API->>DB: UPDATE status done and completed_at
+    DB-->>API: Updated task
+    API-->>FE: 200 OK
+    FE-->>Child: Task shown as done
+
+    Specialist->>FE: View assigned tasks
+    FE->>API: GET /api/children/12/tasks (specialist JWT)
+    API-->>FE: Tasks with updated status
+    FE-->>Specialist: Status shown as done
+
+    Note over API: A child who tries to complete another child's task receives 403 and the task stays unchanged
+```
+
+### Flow 3 – Role-Based AI Weekly Summary
+
+Related requirements: FR-M1-11, FR-M2-05, FR-M7-05, FR-M7-06, FR-M8-01 to FR-M8-15, FR-M8-17, FR-M8-18.
 
 ```mermaid
 sequenceDiagram
@@ -361,22 +416,35 @@ sequenceDiagram
     Reader->>FE: Press Get summary for the week
     FE->>API: POST /api/children/12/ai-summary (JWT, weekStart)
     API->>DB: Check the reader's access to child 12
-    DB-->>API: Access allowed
-    API->>DB: Select tasks and observations of that week that this role may see
-    DB-->>API: Allowed records only
-    API->>AI: summarize(role, records)
-    AI->>AI: Build the prompt for the role (no diagnosis, no treatment)
-    alt Mock mode (tests and CI)
-        AI->>LLM: Return fixed sample answer
-    else Real provider
-        AI->>LLM: Send prompt and records using the key stored on the backend
+    alt No access (child, unrelated parent or unlinked specialist)
+        DB-->>API: Access denied
+        API-->>FE: 403 Forbidden, nothing sent to the AI
+    else Access allowed
+        DB-->>API: Access allowed
+        API->>DB: Select events, tasks, completion statuses and observations of that week
+        DB-->>API: Allowed records only
+        API->>AI: summarize(role, records)
+        AI->>AI: Build the prompt for the role (no diagnosis, treatment or decisions)
+        alt Mock mode (tests and CI)
+            AI->>LLM: Return fixed sample answer
+        else Real provider
+            AI->>LLM: Send prompt and records using the key stored on the backend
+        end
+        alt No answer within 15 seconds or provider error
+            LLM-->>AI: Timeout or error
+            AI-->>API: Controlled error
+            API-->>FE: 503 Service Unavailable
+            FE-->>Reader: Error message and retry, other features keep working
+        else Answer received
+            LLM-->>AI: Summary text
+            AI->>AI: Content guard rejects diagnoses, treatments and decisions
+            AI-->>API: Safe summary text
+            API->>DB: Save summary with source record ids
+            DB-->>API: Saved
+            API-->>FE: 200 with text, AI-generated label, disclaimer and source records
+            FE-->>Reader: Summary shown with links to source records
+        end
     end
-    LLM-->>AI: Summary text
-    AI-->>API: Summary text
-    API->>DB: Save summary with source record ids
-    DB-->>API: Saved
-    API-->>FE: 200 with text, AI-generated label and source records
-    FE-->>Reader: Summary shown with links to source records
     Reader->>FE: Mark as helpful or incorrect
     FE->>API: PATCH /api/children/12/ai-summary/3 (feedback)
     API-->>FE: 200 OK
@@ -496,3 +564,4 @@ Figure 9 WF 08 Weekly schedule \*
 | Date | Change | By |
 |---|---|---|
 | 2026-11-08 | First version: architecture, technology stack and user interface (wireframes); data model, API endpoints and critical flows added | |
+| 2026-11-08 | Added module design; aligned data model, API endpoints and critical flows with SRS revision 1.2 | |
