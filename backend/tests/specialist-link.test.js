@@ -243,3 +243,119 @@ describe("M2 - List and Unlink Specialists API", () => {
     }
   });
 });
+describe("M2 - Additional Authorization and API Tests", () => {
+  const parentToken = jwt.sign(
+    { id: 1, role: "parent" },
+    process.env.JWT_SECRET
+  );
+
+  const body = {
+    childId: 4,
+    specialistEmail: "specialist1@example.com",
+    specialistType: "psychologist"
+  };
+
+  const run = (sql, params = []) =>
+    new Promise((resolve, reject) => {
+      db.run(sql, params, (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+
+  test("Rejects JWT signed with an invalid secret (401)", async () => {
+    const invalidToken = jwt.sign(
+      { id: 1, role: "parent" },
+      "incorrect-secret"
+    );
+
+    const results = await Promise.all([
+      request(app)
+        .post("/api/specialist-links")
+        .set("Authorization", `Bearer ${invalidToken}`)
+        .send(body),
+
+      request(app)
+        .get("/api/children/4/specialists")
+        .set("Authorization", `Bearer ${invalidToken}`),
+
+      request(app)
+        .delete("/api/specialist-links/1")
+        .set("Authorization", `Bearer ${invalidToken}`)
+    ]);
+
+    results.forEach((result) => {
+      expect(result.status).toBe(401);
+    });
+  });
+
+  test("Rejects expired JWT (401)", async () => {
+    const expiredToken = jwt.sign(
+      { id: 1, role: "parent" },
+      process.env.JWT_SECRET,
+      { expiresIn: -1 }
+    );
+
+    const result = await request(app)
+      .post("/api/specialist-links")
+      .set("Authorization", `Bearer ${expiredToken}`)
+      .send(body);
+
+    expect(result.status).toBe(401);
+  });
+
+  test("Rejects invalid child and link IDs (400)", async () => {
+    const create = await request(app)
+      .post("/api/specialist-links")
+      .set("Authorization", `Bearer ${parentToken}`)
+      .send({ ...body, childId: -1 });
+
+    const list = await request(app)
+      .get("/api/children/invalid/specialists")
+      .set("Authorization", `Bearer ${parentToken}`);
+
+    const unlink = await request(app)
+      .delete("/api/specialist-links/invalid")
+      .set("Authorization", `Bearer ${parentToken}`);
+
+    expect(create.status).toBe(400);
+    expect(list.status).toBe(400);
+    expect(unlink.status).toBe(400);
+  });
+
+  test("Rejects unauthorized parent and unregistered specialist", async () => {
+    await run("SAVEPOINT specialist_auth_test");
+
+    try {
+      await run(
+        "INSERT INTO parent_child_links (child_id, parent_id) VALUES (?, ?)",
+        [4, 1]
+      );
+
+      const otherParentToken = jwt.sign(
+        { id: 99, role: "parent" },
+        process.env.JWT_SECRET
+      );
+
+      const forbidden = await request(app)
+        .post("/api/specialist-links")
+        .set("Authorization", `Bearer ${otherParentToken}`)
+        .send(body);
+
+      expect(forbidden.status).toBe(403);
+
+      const unregistered = await request(app)
+        .post("/api/specialist-links")
+        .set("Authorization", `Bearer ${parentToken}`)
+        .send({
+          ...body,
+          specialistEmail: "unknown-specialist@example.com"
+        });
+
+      expect(unregistered.status).toBe(404);
+    } finally {
+      await run("ROLLBACK TO SAVEPOINT specialist_auth_test");
+      await run("RELEASE SAVEPOINT specialist_auth_test");
+    }
+  });
+});
