@@ -30,6 +30,21 @@ const dbPath = path.join(__dirname, "database.sqlite");
 const db = new sqlite3.Database(dbPath, (err) => {
   if (err) console.error("Database connection error:", err.message);
 });
+// Enable SQLite foreign key constraints
+db.run("PRAGMA foreign_keys = ON");
+
+// M2 - Specialist linking database
+db.run(`
+  CREATE TABLE IF NOT EXISTS specialist_links (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    parent_id INTEGER NOT NULL,
+    specialist_id INTEGER NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(parent_id, specialist_id),
+    FOREIGN KEY (parent_id) REFERENCES users(id),
+    FOREIGN KEY (specialist_id) REFERENCES users(id)
+  )
+`);
 
 app.get("/api/tasks", (req, res) => {
   db.all("SELECT * FROM tasks", [], (err, rows) => {
