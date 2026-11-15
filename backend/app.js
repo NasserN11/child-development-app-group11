@@ -161,6 +161,106 @@ app.post("/api/specialist-links", requireAuth, requireParent, (req, res) => {
     }
   );
 });
+// M2 - List specialists linked to a child
+app.get("/api/children/:childId/specialists", requireAuth, requireParent, (req, res) => {
+  const childId = Number(req.params.childId);
+
+  if (!Number.isSafeInteger(childId) || childId <= 0) {
+    return res.status(400).json({ error: "Valid childId is required" });
+  }
+
+  // Verify that the parent owns this child
+  db.get(
+    `SELECT 1
+     FROM parent_child_links pcl
+     JOIN users child ON child.id = pcl.child_id
+     WHERE pcl.child_id = ?
+       AND pcl.parent_id = ?
+       AND child.role = 'child'`,
+    [childId, req.user.id],
+    (err, ownership) => {
+      if (err) {
+        return res.status(500).json({ error: "Database error" });
+      }
+
+      if (!ownership) {
+        return res.status(403).json({
+          error: "You can only view specialists linked to your own child"
+        });
+      }
+
+      // Retrieve specialists linked to this child
+      db.all(
+        `SELECT
+           sl.id AS linkId,
+           u.id AS specialistId,
+           u.name AS specialistName,
+           u.email AS specialistEmail,
+           sl.specialist_type AS specialistType,
+           sl.created_at AS linkedAt
+         FROM specialist_links sl
+         JOIN users u ON u.id = sl.specialist_id
+         WHERE sl.child_id = ?
+           AND sl.parent_id = ?
+         ORDER BY sl.created_at DESC, sl.id DESC`,
+        [childId, req.user.id],
+        (listErr, specialists) => {
+          if (listErr) {
+            return res.status(500).json({ error: "Database error" });
+          }
+
+          return res.status(200).json({
+            childId,
+            specialists
+          });
+        }
+      );
+    }
+  );
+});
+// M2 - Unlink specialist from a child
+app.delete("/api/specialist-links/:linkId", requireAuth, requireParent, (req, res) => {
+  const linkId = Number(req.params.linkId);
+
+  if (!Number.isSafeInteger(linkId) || linkId <= 0) {
+    return res.status(400).json({
+      error: "Valid linkId is required"
+    });
+  }
+
+  // Delete only if the parent owns the linked child
+  db.run(
+    `DELETE FROM specialist_links
+     WHERE id = ?
+       AND parent_id = ?
+       AND EXISTS (
+         SELECT 1
+         FROM parent_child_links pcl
+         JOIN users child ON child.id = pcl.child_id
+         WHERE pcl.child_id = specialist_links.child_id
+           AND pcl.parent_id = ?
+           AND child.role = 'child'
+       )`,
+    [linkId, req.user.id, req.user.id],
+    function (err) {
+      if (err) {
+        return res.status(500).json({
+          error: "Database error"
+        });
+      }
+
+      if (this.changes === 0) {
+        return res.status(404).json({
+          error: "Specialist link not found or access denied"
+        });
+      }
+
+      return res.status(200).json({
+        message: "Specialist unlinked successfully"
+      });
+    }
+  );
+});
 app.get("/api/tasks", (req, res) => {
   db.all("SELECT * FROM tasks", [], (err, rows) => {
     if (err) {

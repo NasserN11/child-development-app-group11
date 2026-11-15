@@ -113,3 +113,133 @@ describe("M2 - Link Specialist API", () => {
     }
   });
 });
+describe("M2 - List and Unlink Specialists API", () => {
+  const parentToken = jwt.sign(
+    { id: 1, role: "parent" },
+    process.env.JWT_SECRET
+  );
+
+  const run = (sql, params = []) =>
+    new Promise((resolve, reject) => {
+      db.run(sql, params, (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+
+  test("Rejects requests without authentication (401)", async () => {
+    const list = await request(app)
+      .get("/api/children/4/specialists");
+
+    const unlink = await request(app)
+      .delete("/api/specialist-links/1");
+
+    expect(list.status).toBe(401);
+    expect(unlink.status).toBe(401);
+  });
+
+  test("Rejects specialist users (403)", async () => {
+    const specialistToken = jwt.sign(
+      { id: 2, role: "specialist" },
+      process.env.JWT_SECRET
+    );
+
+    const list = await request(app)
+      .get("/api/children/4/specialists")
+      .set("Authorization", `Bearer ${specialistToken}`);
+
+    const unlink = await request(app)
+      .delete("/api/specialist-links/1")
+      .set("Authorization", `Bearer ${specialistToken}`);
+
+    expect(list.status).toBe(403);
+    expect(unlink.status).toBe(403);
+  });
+
+  test("Lists and unlinks a specialist for the child's parent", async () => {
+    await run("SAVEPOINT specialist_unlink_list_test");
+
+    try {
+      await run(
+        "INSERT INTO parent_child_links (child_id, parent_id) VALUES (?, ?)",
+        [4, 1]
+      );
+
+      // Create a link for testing
+      const created = await request(app)
+        .post("/api/specialist-links")
+        .set("Authorization", `Bearer ${parentToken}`)
+        .send({
+          childId: 4,
+          specialistEmail: "specialist1@example.com",
+          specialistType: "psychologist"
+        });
+
+      expect(created.status).toBe(201);
+
+      const linkId = created.body.linkId;
+
+      // List linked specialists
+      const list = await request(app)
+        .get("/api/children/4/specialists")
+        .set("Authorization", `Bearer ${parentToken}`);
+
+      expect(list.status).toBe(200);
+      expect(list.body.specialists).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            linkId,
+            specialistEmail: "specialist1@example.com"
+          })
+        ])
+      );
+
+      // Another parent cannot access this child
+      const otherParentToken = jwt.sign(
+        { id: 99, role: "parent" },
+        process.env.JWT_SECRET
+      );
+
+      const forbiddenList = await request(app)
+        .get("/api/children/4/specialists")
+        .set("Authorization", `Bearer ${otherParentToken}`);
+
+      const forbiddenUnlink = await request(app)
+        .delete(`/api/specialist-links/${linkId}`)
+        .set("Authorization", `Bearer ${otherParentToken}`);
+
+      expect(forbiddenList.status).toBe(403);
+      expect(forbiddenUnlink.status).toBe(404);
+
+      // Unlink the specialist
+      const unlink = await request(app)
+        .delete(`/api/specialist-links/${linkId}`)
+        .set("Authorization", `Bearer ${parentToken}`);
+
+      expect(unlink.status).toBe(200);
+
+      // Confirm the specialist is no longer linked
+      const afterUnlink = await request(app)
+        .get("/api/children/4/specialists")
+        .set("Authorization", `Bearer ${parentToken}`);
+
+      expect(afterUnlink.status).toBe(200);
+      expect(
+        afterUnlink.body.specialists.some(
+          (specialist) => specialist.linkId === linkId
+        )
+      ).toBe(false);
+
+      // Cannot unlink the same link twice
+      const duplicateUnlink = await request(app)
+        .delete(`/api/specialist-links/${linkId}`)
+        .set("Authorization", `Bearer ${parentToken}`);
+
+      expect(duplicateUnlink.status).toBe(404);
+    } finally {
+      // Remove all temporary test data
+      await run("ROLLBACK TO SAVEPOINT specialist_unlink_list_test");
+      await run("RELEASE SAVEPOINT specialist_unlink_list_test");
+    }
+  });
+});
