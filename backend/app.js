@@ -48,6 +48,15 @@ db.run(`
     FOREIGN KEY (specialist_id) REFERENCES users(id)
   )
 `);
+// M2 - Parent-child ownership reference
+db.run(`
+  CREATE TABLE IF NOT EXISTS parent_child_links (
+    child_id INTEGER PRIMARY KEY,
+    parent_id INTEGER NOT NULL,
+    FOREIGN KEY (child_id) REFERENCES users(id),
+    FOREIGN KEY (parent_id) REFERENCES users(id)
+  )
+`);
 // M2 - Parent authorization
 function requireParent(req, res, next) {
   if (req.user.role !== "parent") {
@@ -75,9 +84,82 @@ app.post("/api/specialist-links", requireAuth, requireParent, (req, res) => {
     });
   }
 
-  return res.status(501).json({
-    error: "Child ownership verification is not implemented yet"
-  });
+    // M2 - Verify parent owns the selected child
+  db.get(
+    `SELECT 1
+     FROM parent_child_links pcl
+     JOIN users child ON child.id = pcl.child_id
+     WHERE pcl.child_id = ?
+       AND pcl.parent_id = ?
+       AND child.role = 'child'`,
+    [childId, req.user.id],
+    (err, row) => {
+      if (err) {
+        return res.status(500).json({
+          error: "Database error"
+        });
+      }
+
+      if (!row) {
+        return res.status(403).json({
+          error: "You can only link specialists to your own child"
+        });
+      }
+
+      // M2 - Check if the specialist is registered
+      db.get(
+        "SELECT id FROM users WHERE email = ? AND role = 'specialist'",
+        [specialistEmail.trim()],
+        (specialistErr, specialist) => {
+          if (specialistErr) {
+            return res.status(500).json({
+              error: "Database error"
+            });
+          }
+
+          if (!specialist) {
+            return res.status(404).json({
+              error: "Registered specialist not found"
+            });
+          }
+
+                 // M2 - Create specialist link
+          db.run(
+            `INSERT INTO specialist_links
+             (parent_id, child_id, specialist_id, specialist_type)
+             VALUES (?, ?, ?, ?)`,
+            [
+              req.user.id,
+              childId,
+              specialist.id,
+              specialistType.trim()
+            ],
+            function (linkErr) {
+              if (linkErr) {
+                if (
+                  linkErr.code === "SQLITE_CONSTRAINT" &&
+                  linkErr.message.includes("UNIQUE constraint failed")
+                ) {
+                  return res.status(409).json({
+                    error: "Specialist already linked to this child"
+                  });
+                }
+
+                return res.status(500).json({
+                  error: "Database error"
+                });
+              }
+
+              return res.status(201).json({
+                message: "Specialist linked successfully",
+                linkId: this.lastID
+              });
+            }
+          );
+        }
+      );
+    }
+  );
 });
 app.get("/api/tasks", (req, res) => {
   db.all("SELECT * FROM tasks", [], (err, rows) => {
