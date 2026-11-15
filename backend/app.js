@@ -48,7 +48,37 @@ db.run(`
     FOREIGN KEY (specialist_id) REFERENCES users(id)
   )
 `);
+// M2 - Parent authorization
+function requireParent(req, res, next) {
+  if (req.user.role !== "parent") {
+    return res.status(403).json({
+      error: "Only parents can link specialists"
+    });
+  }
 
+  next();
+}
+// M2 - Link specialist API
+app.post("/api/specialist-links", requireAuth, requireParent, (req, res) => {
+ const { childId, specialistEmail, specialistType } = req.body || {};
+
+  if (
+    !Number.isInteger(childId) ||
+    childId <= 0 ||
+    typeof specialistEmail !== "string" ||
+    !specialistEmail.trim() ||
+    typeof specialistType !== "string" ||
+    !specialistType.trim()
+  ) {
+    return res.status(400).json({
+      error: "Valid childId, specialistEmail and specialistType are required"
+    });
+  }
+
+  return res.status(501).json({
+    error: "Child ownership verification is not implemented yet"
+  });
+});
 app.get("/api/tasks", (req, res) => {
   db.all("SELECT * FROM tasks", [], (err, rows) => {
     if (err) {
