@@ -38,10 +38,13 @@ db.run(`
   CREATE TABLE IF NOT EXISTS specialist_links (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     parent_id INTEGER NOT NULL,
+    child_id INTEGER NOT NULL,
     specialist_id INTEGER NOT NULL,
+    specialist_type TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(parent_id, specialist_id),
+    UNIQUE(child_id, specialist_id),
     FOREIGN KEY (parent_id) REFERENCES users(id),
+    FOREIGN KEY (child_id) REFERENCES users(id),
     FOREIGN KEY (specialist_id) REFERENCES users(id)
   )
 `);
