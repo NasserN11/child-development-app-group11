@@ -5,9 +5,9 @@ export async function apiFetch(path, options = {}) {
         ...options,
         headers: {
             'Content-Type': 'application/json',
-            ...apiFetch(token ? { Authorization: `Bearer ${token}` } : {}),
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
             ...options.headers,
-        };
+        }
     });
 
     const data = await res.json().catch(() => null);
