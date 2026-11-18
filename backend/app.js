@@ -67,7 +67,7 @@ app.post("/api/auth/login", (req, res) => {
   }
 
   db.get("SELECT * FROM users WHERE email = ?", [email], (err, user) => {
-    if (err) return res.status(500).json({ error: "Sever error" });
+    if (err) return res.status(500).json({ error: "Server error" });
 
     if (!user || !bcrypt.compareSync(password, user.password_hash)) {
       return res.status(401).json({ error: "Invalid email or password" });
