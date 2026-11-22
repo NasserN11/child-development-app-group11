@@ -49,10 +49,14 @@ const [removingLinkId, setRemovingLinkId] = useState(null);
 async function handleAddSpecialist(event) {
   event.preventDefault();
 
-  if (!loaded) {
-    setError('Please load your child first.');
-    return;
-  }
+
+const id = Number(childId);
+
+if (!Number.isSafeInteger(id) || id <= 0) {
+  setError('Please enter a valid Child ID before adding a specialist.');
+  return;
+}
+
 
   setSaving(true);
   setError('');
@@ -73,9 +77,10 @@ async function handleAddSpecialist(event) {
     );
 
     setSpecialists(data.specialists);
-    setSpecialistEmail('');
-    setSpecialistType('');
-    setSuccess('Specialist linked successfully.');
+setLoaded(true);
+setSpecialistEmail('');
+setSpecialistType('');
+setSuccess('Specialist linked successfully.');
   } catch (err) {
     setError(err.message);
   } finally {
@@ -200,7 +205,7 @@ async function handleRemoveSpecialist(linkId, specialistName) {
     <button
       type="submit"
       className="btn btn-primary"
-      disabled={saving || !loaded}
+      disabled={saving}
     >
       {saving ? 'Adding...' : 'Add Specialist'}
     </button>
