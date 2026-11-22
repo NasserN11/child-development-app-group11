@@ -70,10 +70,7 @@ db.run(`
 `);
 const eventsReady = createEventsTable(db);
 eventsReady.catch(err => console.error("Error initializing events:", err.message));
-app.use("/api", (req, res, next) => {
-  if (!/^\/children\/[^/]+\/events(?:\/|$)/i.test(req.path)) return next();
-  requireAuth(req, res, next);
-}, eventRoutes(db, eventsReady));
+app.use("/api", eventRoutes(db, eventsReady, requireAuth));
 
 // M2 - Parent authorization
 function requireParent(req, res, next) {
