@@ -26,6 +26,15 @@ function requireAuth(req, res, next) {
   }
 }
 
+function requireRole(...roles) {
+  return (req, res, next) => {
+    if (!roles.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    next();
+  }
+}
+
 const dbPath = path.join(__dirname, "database.sqlite");
 const db = new sqlite3.Database(dbPath, (err) => {
   if (err) console.error("Database connection error:", err.message);
@@ -99,4 +108,4 @@ app.get("/api/me", requireAuth, (req, res) => {
 });
 
 
-module.exports = { app, db };
+module.exports = { app, db, requireAuth, requireRole };
