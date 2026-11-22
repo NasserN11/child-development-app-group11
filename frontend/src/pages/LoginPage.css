@@ -1,0 +1,34 @@
+.login-page {
+  min-height: 100vh;
+}
+
+.login-header {
+  padding: 0.75rem var(--space);
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  font-weight: 700;
+}
+
+.login-card {
+  max-width: 420px;
+  margin: 3rem auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.login-card label {
+  font-weight: 600;
+  margin-top: 0.5rem;
+}
+
+.login-card input {
+  font: inherit;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.login-card .btn {
+  margin-top: 1rem;
+}

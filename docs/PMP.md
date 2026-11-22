@@ -63,3 +63,24 @@
 | Sprint 4 | 11-12 | Fix bugs; final report; end-to-end tet for each of M1-M8; presentation and live demo | Release v1.0, final |
 
 ---
+
+## PMP-3. Progress Review: Mid-term (v0.1)
+
+**Jira board screenshot:**  
+![Jira board, 15 November 2026](img/jira-board-2026-11-15.png)
+
+| Epic | Planned for this point | Status (Done / In progress / Not started) |
+|---|---|---|
+| DESIGN | Software design document (first version) | Done (first version) |
+| SRS | Software requirements specification document (first version) |  Done (first version) |
+| PMP-1 | Project, Jira setup, team and roles, GitHub repo, CI seketon | Done |
+| PMP-2 | Epics M1-M8 and sprint pln created | Done |
+| PMP-3 | review submitted | Done |
+| M1 | Login with JWT, role-based access, app shell, login page | In progress | 
+| M2 | Specialist link database, Link/Unlink specialist APIs, API tests | In progress | 
+| M3 | Event creation/Weekly events APIs, access control, weekly calendar, event database model | In progress |
+| M4 | Tasks table and seed data, tasks APIs, API tests | In progress | 
+| M5-M8, PMP-4-PMP-6 | Planned later (v0.2 and final) | Not sterted |
+
+
+---
