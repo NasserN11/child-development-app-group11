@@ -1,0 +1,47 @@
+.schedule-controls, .schedule-week, .schedule-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .75rem;
+}
+
+.schedule-controls, .schedule-navigation { margin-bottom: 1rem; }
+.schedule-navigation { border: 0; padding: 0; }
+
+.schedule-days {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
+  gap: .75rem;
+}
+
+.schedule-day {
+  min-height: 8rem;
+  border: 1px solid #d4dde6;
+  border-radius: .5rem;
+  padding: .75rem;
+}
+
+.schedule-day h2, .schedule-event h3 { font-size: 1rem; margin: 0; }
+.schedule-event {
+  margin-top: .75rem;
+  border-inline-start: 3px solid #2563a6;
+  padding-inline-start: .5rem;
+  overflow-wrap: anywhere;
+}
+.schedule-event p { margin: .25rem 0; }
+
+.schedule-form {
+  max-width: 32rem;
+  margin-block: 1rem;
+  border: 1px solid #d4dde6;
+  border-radius: .5rem;
+  padding: 1rem;
+}
+
+.schedule-form fieldset { border: 0; margin: 0; padding: 0; }
+.schedule-form label { display: grid; gap: .25rem; margin-bottom: .75rem; }
+.schedule-form :is(input, textarea), .schedule-controls select {
+  font: inherit;
+  padding: .35rem .5rem;
+}
+.schedule-form button + button { margin-inline-start: .5rem; }
