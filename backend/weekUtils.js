@@ -4,6 +4,18 @@ const formatter = new Intl.DateTimeFormat("en-CA", {
   timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit",
 });
 
+const offsetFormatter = new Intl.DateTimeFormat("en", {
+  timeZone: zone, timeZoneName: "longOffset",
+});
+
+function istanbulMidnight(date) {
+  const utc = Date.parse(date + "T00:00:00Z");
+  const offset = offsetFormatter.formatToParts(utc).find(part => part.type === "timeZoneName").value;
+  const [, sign, hours, minutes, seconds = 0] = /GMT([+-])(\d{2}):(\d{2})(?::(\d{2}))?/.exec(offset);
+  const millis = (Number(hours) * 3600 + Number(minutes) * 60 + Number(seconds)) * 1000;
+  return new Date(utc - (sign === "+" ? millis : -millis)).toISOString();
+}
+
 function currentMonday(now = new Date()) {
   const localDate = new Date(formatter.format(now) + "T00:00:00Z");
   const offset = (localDate.getUTCDay() + 6) % 7;
@@ -15,8 +27,8 @@ function weekBounds(date) {
   const day = new Date(date + "T00:00:00Z");
   if (!Number.isFinite(+day) || day.toISOString().slice(0, 10) !== date || day.getUTCDay() !== 1) return null;
   const next = new Date(+day + 7 * DAY).toISOString().slice(0, 10);
-  // Istanbul has observed UTC+03:00 year-round since September 2016.
-  return [date, next].map(value => new Date(value + "T00:00:00+03:00").toISOString());
+  if (next.length !== 10) return null;
+  return [date, next].map(istanbulMidnight);
 }
 
 module.exports = { currentMonday, weekBounds };

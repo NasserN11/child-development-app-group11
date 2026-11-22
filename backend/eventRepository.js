@@ -1,4 +1,4 @@
-const { run } = require("./eventsDb");
+const { all, run } = require("./eventsDb");
 
 async function createEvent(db, childId, createdBy, event) {
   const result = await run(db, `
@@ -8,4 +8,12 @@ async function createEvent(db, childId, createdBy, event) {
   return { id: result.lastID, childId, createdBy, ...event };
 }
 
-module.exports = { createEvent };
+function listEvents(db, childId, start, end) {
+  return all(db, `SELECT id, child_id AS childId, created_by AS createdBy, title,
+      description, start_time AS startTime, end_time AS endTime
+    FROM events
+    WHERE child_id = ? AND julianday(start_time) >= julianday(?) AND julianday(start_time) < julianday(?)
+    ORDER BY julianday(start_time), id`, [childId, start, end]);
+}
+
+module.exports = { createEvent, listEvents };
