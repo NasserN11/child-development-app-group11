@@ -3,6 +3,8 @@ const jwt = require("jsonwebtoken");
 const express = require("express");
 const sqlite3 = require("sqlite3").verbose();
 const path = require("path");
+const { createEventsTable } = require("./eventsDb");
+const { eventRoutes } = require("./eventRoutes");
 
 const app = express();
 const port = 5000;
@@ -35,7 +37,7 @@ function requireRole(...roles) {
   }
 }
 
-const dbPath = path.join(__dirname, "database.sqlite");
+const dbPath = process.env.DATABASE_PATH || path.join(__dirname, "database.sqlite");
 const db = new sqlite3.Database(dbPath, (err) => {
   if (err) console.error("Database connection error:", err.message);
 });
@@ -66,6 +68,13 @@ db.run(`
     FOREIGN KEY (parent_id) REFERENCES users(id)
   )
 `);
+const eventsReady = createEventsTable(db);
+eventsReady.catch(err => console.error("Error initializing events:", err.message));
+app.use("/api", (req, res, next) => {
+  if (!/^\/children\/[^/]+\/events(?:\/|$)/i.test(req.path)) return next();
+  requireAuth(req, res, next);
+}, eventRoutes(db, eventsReady));
+
 // M2 - Parent authorization
 function requireParent(req, res, next) {
   if (req.user.role !== "parent") {
