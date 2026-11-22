@@ -3,6 +3,7 @@ const jwt = require("jsonwebtoken");
 const express = require("express");
 const sqlite3 = require("sqlite3").verbose();
 const path = require("path");
+const { authorizeChildAccess } = require("./access");
 
 const app = express();
 const port = 5000;
@@ -270,15 +271,15 @@ app.delete("/api/specialist-links/:linkId", requireAuth, requireParent, (req, re
     }
   );
 });
-app.get("/api/tasks", (req, res) => {
-  db.all("SELECT * FROM tasks", [], (err, rows) => {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
-
-    res.json(rows);
-  });
-});
+// M4 - Tasks. The old skeleton route GET /api/tasks returned every task to
+// anyone, so it was removed. Tasks now live under a child and are protected.
+app.use(
+  "/api/children/:childId/tasks",
+  requireAuth,
+  authorizeChildAccess(db),
+  require("./routes/tasks")(db),
+);
+app.use("/api/children", requireAuth, require("./routes/children")(db));
 
 app.post("/api/auth/login", (req, res) => {
   const { email, password } = req.body;
