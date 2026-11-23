@@ -38,10 +38,15 @@ const childAccessSql = `
 `;
 
 async function canAccessChild(db, user, childId) {
-  if (!positiveId(user?.id)) return false;
+  if (!positiveId(user?.id) || !["parent", "specialist", "child"].includes(user.role)) return false;
   const rows = await all(db, `SELECT child.id FROM users child
     ${childAccessSql} AND child.id = ?`, [user.id, user.role, childId]);
   return rows.length > 0;
 }
 
-module.exports = { positiveId, eventInput, canAccessChild, childAccessSql };
+function accessibleChildren(db, user) {
+  return all(db, `SELECT child.id, child.name FROM users child
+    ${childAccessSql} ORDER BY child.name, child.id`, [user.id, user.role]);
+}
+
+module.exports = { positiveId, eventInput, canAccessChild, accessibleChildren, childAccessSql };
