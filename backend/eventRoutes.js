@@ -1,6 +1,8 @@
 const express = require("express");
 const { positiveId, eventInput, canAccessChild } = require("./eventService");
-const { createEvent } = require("./eventRepository");
+const { createEvent, listEvents } = require("./eventRepository");
+
+const { weekBounds } = require("./weekUtils");
 
 function eventRoutes(db, ready) {
   const router = express.Router();
@@ -15,6 +17,14 @@ function eventRoutes(db, ready) {
     await ready;
     res.locals.childId = childId;
     next();
+  });
+
+  router.get(events, async (req, res) => {
+    const { weekStart } = req.query;
+    const bounds = weekBounds(weekStart);
+    if (!bounds) return res.status(400).json({ error: "weekStart must be a Monday in YYYY-MM-DD format" });
+    const { childId } = res.locals;
+    res.json({ childId, weekStart, events: await listEvents(db, childId, ...bounds) });
   });
 
   router.post(events, async (req, res) => {
