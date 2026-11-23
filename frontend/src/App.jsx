@@ -4,6 +4,8 @@ import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
 import WeeklySchedulePage from './pages/WeeklySchedulePage';
 import NotFoundPage from './pages/NotFoundPage';
+import SpecialistsPage from './pages/SpecialistsPage';
+import RequireRole from './components/RequireRole';
 
 export default function App() {
   return (
@@ -12,6 +14,9 @@ export default function App() {
       <Route element={<AppLayout />}>
         <Route path="/" element={<HomePage />} />
         <Route path="/schedule" element={<WeeklySchedulePage />} />
+        <Route element={<RequireRole allow={['parent']} />}>
+          <Route path="/specialists" element={<SpecialistsPage />} />
+        </Route>
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>
